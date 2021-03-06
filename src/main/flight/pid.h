@@ -81,10 +81,10 @@ typedef enum {
 } pidType_e;
 
 typedef struct pid8_s {
-    uint8_t P;
-    uint8_t I;
-    uint8_t D;
-    uint8_t FF;
+    uint16_t P;
+    uint16_t I;
+    uint16_t D;
+    uint16_t FF;
 } pid8_t;
 
 typedef struct pidBank_s {
@@ -126,7 +126,9 @@ typedef struct pidProfile_s {
     uint16_t    fixedWingItermThrowLimit;
     float       fixedWingReferenceAirspeed;     // Reference tuning airspeed for the airplane - the speed for which PID gains are tuned
     float       fixedWingCoordinatedYawGain;    // This is the gain of the yaw rate required to keep the yaw rate consistent with the turn rate for a coordinated turn.
+    float       fixedWingCoordinatedPitchGain;    // This is the gain of the pitch rate to keep the pitch angle constant during coordinated turns.
     float       fixedWingItermLimitOnStickPosition;   //Do not allow Iterm to grow when stick position is above this point
+    uint16_t    fixedWingYawItermBankFreeze;       // Freeze yaw Iterm when bank angle is more than this many degrees
 
     uint8_t     loiter_direction;               // Direction of loitering center point on right wing (clockwise - as before), or center point on left wing (counterclockwise)
     float       navVelXyDTermLpfHz;
@@ -149,6 +151,8 @@ typedef struct pidProfile_s {
     uint16_t kalman_w;
     uint16_t kalman_sharpness;
     uint8_t kalmanEnabled;
+
+    float fixedWingLevelTrim;
 } pidProfile_t;
 
 typedef struct pidAutotuneConfig_s {
@@ -198,4 +202,4 @@ void autotuneUpdateState(void);
 void autotuneFixedWingUpdate(const flight_dynamics_index_t axis, float desiredRateDps, float reachedRateDps, float pidOutput);
 
 pidType_e pidIndexGetType(pidIndex_e pidIndex);
-uint8_t * getD_FFRefByBank(pidBank_t *pidBank, pidIndex_e pidIndex);
+uint16_t * getD_FFRefByBank(pidBank_t *pidBank, pidIndex_e pidIndex);

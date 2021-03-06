@@ -569,7 +569,7 @@ static bool estimationCalculateCorrection_Z(estimationContext_t * ctx)
         if (ctx->newFlags & EST_GPS_Z_VALID) {
             // Trust GPS velocity only if residual/error is less than 2.5 m/s, scale weight according to gaussian distribution
             const float gpsRocResidual = posEstimator.gps.vel.z - posEstimator.est.vel.z;
-            const float gpsRocScaler = bellCurve(gpsRocResidual, 2.5f);
+            const float gpsRocScaler = bellCurve(gpsRocResidual, 250.0f);
             ctx->estVelCorr.z += gpsRocResidual * positionEstimationConfig()->w_z_gps_v * gpsRocScaler * ctx->dt;
         }
 
@@ -618,7 +618,7 @@ static bool estimationCalculateCorrection_XY_GPS(estimationContext_t * ctx)
             ctx->estPosCorr.y += posEstimator.gps.pos.y - posEstimator.est.pos.y;
             ctx->estVelCorr.x += posEstimator.gps.vel.x - posEstimator.est.vel.x;
             ctx->estVelCorr.y += posEstimator.gps.vel.y - posEstimator.est.vel.y;
-            ctx->newEPH = posEstimator.gps.epv;
+            ctx->newEPH = posEstimator.gps.eph;
         }
         else {
             const float gpsPosXResidual = posEstimator.gps.pos.x - posEstimator.est.pos.x;

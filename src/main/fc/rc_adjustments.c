@@ -268,12 +268,18 @@ static const adjustmentConfig_t defaultAdjustmentConfigs[ADJUSTMENT_FUNCTION_COU
         .adjustmentFunction = ADJUSTMENT_VTX_POWER_LEVEL,
         .mode = ADJUSTMENT_MODE_STEP,
         .data = { .stepConfig = { .step = 1 }}
-#ifdef USE_INFLIGHT_PROFILE_ADJUSTMENT
     }, {
-        .adjustmentFunction = ADJUSTMENT_PROFILE,
-        .mode = ADJUSTMENT_MODE_SELECT,
-        .data = { .selectConfig = { .switchPositions = 3 }}
-#endif
+        .adjustmentFunction = ADJUSTMENT_TPA,
+        .mode = ADJUSTMENT_MODE_STEP,
+        .data = { .stepConfig = { .step = 1 }}
+    }, {
+        .adjustmentFunction = ADJUSTMENT_TPA_BREAKPOINT,
+        .mode = ADJUSTMENT_MODE_STEP,
+        .data = { .stepConfig = { .step = 5 }}
+    }, {
+        .adjustmentFunction = ADJUSTMENT_NAV_FW_CONTROL_SMOOTHNESS,
+        .mode = ADJUSTMENT_MODE_STEP,
+        .data = { .stepConfig = { .step = 1 }}
     }
 };
 
@@ -354,9 +360,9 @@ static void applyAdjustmentManualRate(adjustmentFunction_e adjustmentFunction, u
     return applyAdjustmentU8(adjustmentFunction, val, delta, RC_ADJUSTMENT_MANUAL_RATE_MIN, RC_ADJUSTMENT_MANUAL_RATE_MAX);
 }
 
-static void applyAdjustmentPID(adjustmentFunction_e adjustmentFunction, uint8_t *val, int delta)
+static void applyAdjustmentPID(adjustmentFunction_e adjustmentFunction, uint16_t *val, int delta)
 {
-    applyAdjustmentU8(adjustmentFunction, val, delta, RC_ADJUSTMENT_PID_MIN, RC_ADJUSTMENT_PID_MAX);
+    applyAdjustmentU16(adjustmentFunction, val, delta, RC_ADJUSTMENT_PID_MIN, RC_ADJUSTMENT_PID_MAX);
 }
 
 static void applyStepAdjustment(controlRateConfig_t *controlRateConfig, uint8_t adjustmentFunction, int delta)
@@ -548,6 +554,7 @@ static void applyStepAdjustment(controlRateConfig_t *controlRateConfig, uint8_t 
         case ADJUSTMENT_FW_MIN_THROTTLE_DOWN_PITCH_ANGLE:
             applyAdjustmentU16(ADJUSTMENT_FW_MIN_THROTTLE_DOWN_PITCH_ANGLE, &mixerConfigMutable()->fwMinThrottleDownPitchAngle, delta, 0, FW_MIN_THROTTLE_DOWN_PITCH_ANGLE_MAX);
             break;
+#if defined(USE_VTX_SMARTAUDIO) || defined(USE_VTX_TRAMP)
         case ADJUSTMENT_VTX_POWER_LEVEL:
             {
                 vtxDeviceCapability_t vtxDeviceCapability;
@@ -555,6 +562,16 @@ static void applyStepAdjustment(controlRateConfig_t *controlRateConfig, uint8_t 
                     applyAdjustmentU8(ADJUSTMENT_VTX_POWER_LEVEL, &vtxSettingsConfigMutable()->power, delta, VTX_SETTINGS_MIN_POWER, vtxDeviceCapability.powerCount);
                 }
             }
+            break;
+#endif
+        case ADJUSTMENT_TPA:
+            applyAdjustmentU8(ADJUSTMENT_TPA, &controlRateConfig->throttle.dynPID, delta, 0, CONTROL_RATE_CONFIG_TPA_MAX);
+            break;
+        case ADJUSTMENT_TPA_BREAKPOINT:
+            applyAdjustmentU16(ADJUSTMENT_TPA_BREAKPOINT, &controlRateConfig->throttle.pa_breakpoint, delta, PWM_RANGE_MIN, PWM_RANGE_MAX);
+            break;
+        case ADJUSTMENT_NAV_FW_CONTROL_SMOOTHNESS:
+            applyAdjustmentU8(ADJUSTMENT_NAV_FW_CONTROL_SMOOTHNESS, &navConfigMutable()->fw.control_smoothness, delta, 0, 9);
             break;
         default:
             break;

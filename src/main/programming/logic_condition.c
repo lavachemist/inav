@@ -30,18 +30,21 @@
 
 #include "programming/logic_condition.h"
 #include "programming/global_variables.h"
+#include "programming/pid.h"
 #include "common/utils.h"
 #include "rx/rx.h"
 #include "common/maths.h"
 #include "fc/fc_core.h"
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
+#include "fc/rc_modes.h"
 #include "navigation/navigation.h"
 #include "sensors/battery.h"
 #include "sensors/pitotmeter.h"
 #include "flight/imu.h"
 #include "flight/pid.h"
 #include "drivers/io_port_expander.h"
+#include "io/osd_common.h"
 
 #include "navigation/navigation.h"
 #include "navigation/navigation_private.h"
@@ -53,6 +56,7 @@ PG_REGISTER_ARRAY_WITH_RESET_FN(logicCondition_t, MAX_LOGIC_CONDITIONS, logicCon
 
 EXTENDED_FASTRAM uint64_t logicConditionsGlobalFlags;
 EXTENDED_FASTRAM int logicConditionValuesByType[LOGIC_CONDITION_LAST];
+EXTENDED_FASTRAM rcChannelOverride_t rcChannelOverrides[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 
 void pgResetFn_logicConditions(logicCondition_t *instance)
 {
@@ -207,6 +211,7 @@ static int logicConditionCompute(
             break;
 
         case LOGIC_CONDITION_SET_VTX_POWER_LEVEL:
+#if defined(USE_VTX_SMARTAUDIO) || defined(USE_VTX_TRAMP)
             if (
                 logicConditionValuesByType[LOGIC_CONDITION_SET_VTX_POWER_LEVEL] != operandA && 
                 vtxCommonGetDeviceCapability(vtxCommonDevice(), &vtxDeviceCapability)
@@ -218,6 +223,9 @@ static int logicConditionCompute(
                 return false;
             }
             break;
+#else
+            return false;
+#endif
 
         case LOGIC_CONDITION_SET_VTX_BAND:
             if (
@@ -302,6 +310,20 @@ static int logicConditionCompute(
             return scaleRange(constrain(operandA, 0, 1000), 0, 1000, 0, operandB);
         break;
 
+        case LOGIC_CONDITION_RC_CHANNEL_OVERRIDE:
+            temporaryValue = constrain(operandA - 1, 0, MAX_SUPPORTED_RC_CHANNEL_COUNT - 1);
+            rcChannelOverrides[temporaryValue].active = true;
+            rcChannelOverrides[temporaryValue].value = constrain(operandB, PWM_RANGE_MIN, PWM_RANGE_MAX);
+            LOGIC_CONDITION_GLOBAL_FLAG_ENABLE(LOGIC_CONDITION_GLOBAL_FLAG_OVERRIDE_RC_CHANNEL);
+            return true;
+        break;
+
+        case LOGIC_CONDITION_SET_HEADING_TARGET:
+            temporaryValue = CENTIDEGREES_TO_DEGREES(wrap_36000(DEGREES_TO_CENTIDEGREES(operandA)));
+            updateHeadingHoldTarget(temporaryValue);
+            return temporaryValue;
+        break;
+
         default:
             return false;
             break; 
@@ -362,7 +384,7 @@ static int logicConditionGetFlightOperandValue(int operand) {
             return constrain(getRSSI() * 100 / RSSI_MAX_VALUE, 0, 99);
             break;
         
-        case LOGIC_CONDITION_OPERAND_FLIGHT_VBAT: // V / 10
+        case LOGIC_CONDITION_OPERAND_FLIGHT_VBAT: // V / 100
             return getBatteryVoltage();
             break;
 
@@ -387,7 +409,7 @@ static int logicConditionGetFlightOperandValue(int operand) {
 
         //FIXME align with osdGet3DSpeed
         case LOGIC_CONDITION_OPERAND_FLIGHT_3D_SPEED: // cm/s
-            return (int) sqrtf(sq(gpsSol.groundSpeed) + sq((int)getEstimatedActualVelocity(Z)));
+            return osdGet3DSpeed();
             break;
 
         case LOGIC_CONDITION_OPERAND_FLIGHT_AIR_SPEED: // cm/s
@@ -403,7 +425,7 @@ static int logicConditionGetFlightOperandValue(int operand) {
             break;
 
         case LOGIC_CONDITION_OPERAND_FLIGHT_VERTICAL_SPEED: // cm/s
-            return constrain(getEstimatedActualVelocity(Z), 0, INT16_MAX);
+            return constrain(getEstimatedActualVelocity(Z), INT16_MIN, INT16_MAX);
             break;
 
         case LOGIC_CONDITION_OPERAND_FLIGHT_TROTTLE_POS: // %
@@ -451,7 +473,7 @@ static int logicConditionGetFlightOperandValue(int operand) {
             break;
 
         case LOGIC_CONDITION_OPERAND_FLIGHT_IS_FAILSAFE: // 0/1
-            return (failsafePhase() == FAILSAFE_RX_LOSS_MONITORING) ? 1 : 0;
+            return (failsafePhase() != FAILSAFE_IDLE) ? 1 : 0;
             break;
         
         case LOGIC_CONDITION_OPERAND_FLIGHT_STABILIZED_YAW: // 
@@ -464,6 +486,34 @@ static int logicConditionGetFlightOperandValue(int operand) {
         
         case LOGIC_CONDITION_OPERAND_FLIGHT_STABILIZED_PITCH: // 
             return axisPID[PITCH];
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_WAYPOINT_INDEX:
+            return NAV_Status.activeWpNumber;
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_WAYPOINT_ACTION:
+            return NAV_Status.activeWpAction;
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_3D_HOME_DISTANCE: //in m
+            return constrain(sqrtf(sq(GPS_distanceToHome) + sq(getEstimatedActualPosition(Z)/100)), 0, INT16_MAX);
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_CRSF_LQ:
+        #ifdef USE_SERIALRX_CRSF
+            return rxLinkStatistics.uplinkLQ;
+        #else
+            return 0;
+        #endif
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_CRSF_SNR:
+        #ifdef USE_SERIALRX_CRSF
+            return rxLinkStatistics.uplinkSNR;
+        #else
+            return 0;
+        #endif
             break;
 
         default:
@@ -512,6 +562,14 @@ static int logicConditionGetFlightModeOperandValue(int operand) {
             return (bool) FLIGHT_MODE(AIRMODE_ACTIVE);
             break;
 
+        case LOGIC_CONDITION_OPERAND_FLIGHT_MODE_USER1:
+            return IS_RC_MODE_ACTIVE(BOXUSER1);
+            break;
+
+        case LOGIC_CONDITION_OPERAND_FLIGHT_MODE_USER2:
+            return IS_RC_MODE_ACTIVE(BOXUSER2);
+            break;
+
         default:
             return 0;
             break;
@@ -554,6 +612,12 @@ int logicConditionGetOperandValue(logicOperandType_e type, int operand) {
             }
             break;
 
+        case LOGIC_CONDITION_OPERAND_TYPE_PID:
+            if (operand >= 0 && operand < MAX_PROGRAMMING_PID_COUNT) {
+                retVal = programmingPidGetOutput(operand);
+            }
+            break;
+
         default:
             break;
     }
@@ -578,9 +642,14 @@ void logicConditionUpdateTask(timeUs_t currentTimeUs) {
     //Disable all flags
     logicConditionsGlobalFlags = 0;
 
+    for (uint8_t i = 0; i < MAX_SUPPORTED_RC_CHANNEL_COUNT; i++) {
+        rcChannelOverrides[i].active = false;
+    }
+
     for (uint8_t i = 0; i < MAX_LOGIC_CONDITIONS; i++) {
         logicConditionProcess(i);
     }
+
 #ifdef USE_I2C_IO_EXPANDER
     ioPortExpanderSync();
 #endif
@@ -621,4 +690,12 @@ int16_t getRcCommandOverride(int16_t command[], uint8_t axis) {
     }
 
     return outputValue;
+}
+
+int16_t getRcChannelOverride(uint8_t channel, int16_t originalValue) {
+    if (rcChannelOverrides[channel].active) {
+        return rcChannelOverrides[channel].value;
+    } else {
+        return originalValue;
+    }
 }

@@ -107,6 +107,7 @@
 #include "io/displayport_frsky_osd.h"
 #include "io/displayport_msp.h"
 #include "io/displayport_max7456.h"
+#include "io/displayport_srxl.h"
 #include "io/flashfs.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
@@ -146,8 +147,6 @@
 #include "scheduler/scheduler.h"
 
 #include "telemetry/telemetry.h"
-
-#include "uav_interconnect/uav_interconnect.h"
 
 #ifdef USE_HARDWARE_REVISION_DETECTION
 #include "hardware_revision.h"
@@ -212,7 +211,7 @@ void init(void)
     detectHardwareRevision();
 #endif
 
-#ifdef BRUSHED_ESC_AUTODETECT
+#ifdef USE_BRUSHED_ESC_AUTODETECT
     detectBrushedESC();
 #endif
 
@@ -569,8 +568,9 @@ void init(void)
     }
 #endif
 
-#ifdef USE_UAV_INTERCONNECT
-    uavInterconnectBusInit();
+#if defined(USE_CMS) && defined(USE_SPEKTRUM_CMS_TELEMETRY) && defined(USE_TELEMETRY_SRXL)
+    // Register the srxl Textgen telemetry sensor as a displayport device
+    cmsDisplayPortRegister(displayPortSrxlInit());
 #endif
 
 #ifdef USE_GPS
@@ -599,6 +599,15 @@ void init(void)
 #endif
 
 #ifdef USE_BLACKBOX
+
+    //Do not allow blackbox to be run faster that 1kHz. It can cause UAV to drop dead when digital ESC protocol is used
+    const uint32_t blackboxLooptime =  getLooptime() * blackboxConfig()->rate_denom / blackboxConfig()->rate_num;
+
+    if (blackboxLooptime < 1000) {
+        blackboxConfigMutable()->rate_num = 1;
+        blackboxConfigMutable()->rate_denom = ceil(1000 / getLooptime());
+    }
+
     // SDCARD and FLASHFS are used only for blackbox
     // Make sure we only init what's necessary for blackbox
     switch (blackboxConfig()->device) {

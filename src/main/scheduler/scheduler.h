@@ -86,7 +86,7 @@ typedef enum {
 #ifdef USE_LED_STRIP
     TASK_LEDSTRIP,
 #endif
-#ifdef USE_PWM_SERVO_DRIVER
+#if defined(USE_PWM_SERVO_DRIVER) || defined(USE_SERVO_SBUS)
     TASK_PWMDRIVER,
 #endif
 #ifdef STACK_CHECK
@@ -100,9 +100,6 @@ typedef enum {
 #endif
 #ifdef USE_OPFLOW
     TASK_OPFLOW,
-#endif
-#ifdef USE_UAV_INTERCONNECT
-    TASK_UAV_INTERCONNECT,
 #endif
 #ifdef USE_RCDEVICE
     TASK_RCDEVICE,

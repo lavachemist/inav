@@ -27,6 +27,8 @@
 #define BEEPER                  PA1
 #define BEEPER_INVERTED
 
+#define USE_DSHOT
+
 // MPU interrupt
 #define USE_EXTI
 #define GYRO_INT_EXTI            PC4
@@ -139,7 +141,3 @@
 #define TARGET_IO_PORTB         0xffff
 #define TARGET_IO_PORTC         0xffff
 #define TARGET_IO_PORTD         (BIT(2))
-
-#ifdef USE_USB_MSC
-# undef USE_USB_MSC
-#endif

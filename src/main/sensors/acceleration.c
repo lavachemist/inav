@@ -50,6 +50,7 @@ FILE_COMPILE_FOR_SPEED
 #include "drivers/accgyro/accgyro_adxl345.h"
 #include "drivers/accgyro/accgyro_mma845x.h"
 #include "drivers/accgyro/accgyro_bma280.h"
+#include "drivers/accgyro/accgyro_bmi088.h"
 #include "drivers/accgyro/accgyro_bmi160.h"
 #include "drivers/accgyro/accgyro_icm20689.h"
 #include "drivers/accgyro/accgyro_fake.h"
@@ -231,6 +232,19 @@ static bool accDetect(accDev_t *dev, accelerationSensor_e accHardwareToUse)
     case ACC_BMI160:
         if (bmi160AccDetect(dev)) {
             accHardware = ACC_BMI160;
+            break;
+        }
+        /* If we are asked for a specific sensor - break out, otherwise - fall through and continue */
+        if (accHardwareToUse != ACC_AUTODETECT) {
+            break;
+        }
+        FALLTHROUGH;
+#endif
+
+#if defined(USE_IMU_BMI088)
+    case ACC_BMI088:
+        if (bmi088AccDetect(dev)) {
+            accHardware = ACC_BMI088;
             break;
         }
         /* If we are asked for a specific sensor - break out, otherwise - fall through and continue */
@@ -462,7 +476,7 @@ static void performAcclerationCalibration(void)
         if (!sensorCalibrationSolveForOffset(&calState, accTmp)) {
             accTmp[0] = 0.0f;
             accTmp[1] = 0.0f;
-            accTmp[1] = 0.0f;
+            accTmp[2] = 0.0f;
             calFailed = true;
         }
 
@@ -486,7 +500,7 @@ static void performAcclerationCalibration(void)
         if (!sensorCalibrationSolveForScale(&calState, accTmp)) {
             accTmp[0] = 1.0f;
             accTmp[1] = 1.0f;
-            accTmp[1] = 1.0f;
+            accTmp[2] = 1.0f;
             calFailed = true;
         }
 
